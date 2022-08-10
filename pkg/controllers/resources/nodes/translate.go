@@ -300,10 +300,6 @@ func (s *nodeSyncer) filterOutTaintsMatchingTolerations(taints []corev1.Taint) [
 nextTaint:
 	for _, taint := range taints {
 		for _, tol := range s.enforcedTolerations {
-			// Refer Kubernetes Documentation for Taints & Tolerations
-			// for rules about toleration matching taints
-			// https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
-
 			// Special case
 			// An empty key with operator Exists matches all keys,
 			// values and effects which means this will tolerate everything.
