@@ -151,7 +151,7 @@ func (s *persistentVolumeSyncer) Sync(ctx *synccontext.SyncContext, pObj client.
 
 	// check if there is a corresponding virtual pvc
 	updatedObj := s.translateUpdateBackwards(ctx, vPersistentVolume, pPersistentVolume, vPvc)
-	if updatedObj != nil {
+	if updatedObj != nil && vPvc != nil {
 		ctx.Log.Infof("update virtual persistent volume %s, because spec has changed", vPersistentVolume.Name)
 		translator.PrintChanges(vPersistentVolume, updatedObj, ctx.Log)
 		err = ctx.VirtualClient.Update(ctx.Context, updatedObj)
@@ -251,8 +251,8 @@ func (s *persistentVolumeSyncer) shouldSync(ctx context.Context, pObj *corev1.Pe
 		} else if translate.IsManagedCluster(s.targetNamespace, pObj) {
 			return true, nil, nil
 		}
-
-		return false, nil, nil
+		// When the pvc has been deleted, pv should be deleted based on reclaim policy. Hence if reclaim policy is retain, sync bool should return true as this state should be updated upstream, but in case of reclaim policy delete, the sync bool returns falase as earlier.
+		return pObj.Spec.PersistentVolumeReclaimPolicy == corev1.PersistentVolumeReclaimRetain, nil, nil
 	}
 
 	return true, vPvc, nil

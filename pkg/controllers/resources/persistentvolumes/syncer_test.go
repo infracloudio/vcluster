@@ -1,10 +1,11 @@
 package persistentvolumes
 
 import (
+	"testing"
+
 	synccontext "github.com/loft-sh/vcluster/pkg/controllers/syncer/context"
 	"gotest.tools/assert"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -103,8 +104,133 @@ func TestSync(t *testing.T) {
 			Message: "someMessage",
 		},
 	}
+	// Reclaim policy retain for virtual PV
+	baseRPRetainVPv := &corev1.PersistentVolume{
+		ObjectMeta: basePvObjectMeta,
+		Spec: corev1.PersistentVolumeSpec{
+			ClaimRef:                      baseVPvcReference,
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
+			StorageClassName:              "someStorageClass",
+		},
+	}
+	baseRPRetainBoundVPv := &corev1.PersistentVolume{
+		ObjectMeta: basePvObjectMeta,
+		Spec: corev1.PersistentVolumeSpec{
+			ClaimRef:                      baseVPvcReference,
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
+			StorageClassName:              "someStorageClass",
+		},
+		Status: corev1.PersistentVolumeStatus{
+			Phase: corev1.VolumeBound,
+		},
+	}
+
+	baseRPRetainReleasedVPv := &corev1.PersistentVolume{
+		ObjectMeta: basePvObjectMeta,
+		Spec: corev1.PersistentVolumeSpec{
+			ClaimRef:                      baseVPvcReference,
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
+			StorageClassName:              "someStorageClass",
+		},
+		Status: corev1.PersistentVolumeStatus{
+			Phase: corev1.VolumeReleased,
+		},
+	}
+
+	// Reclaim policy delete for virtual PV
+	baseRPDeleteVPv := &corev1.PersistentVolume{
+		ObjectMeta: basePvObjectMeta,
+		Spec: corev1.PersistentVolumeSpec{
+			ClaimRef:                      baseVPvcReference,
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
+		},
+		Status: corev1.PersistentVolumeStatus{
+			Phase: corev1.VolumeReleased,
+		},
+	}
+
+	// Reclaim policy retain for physical PV
+	baseRPRetainPPv := &corev1.PersistentVolume{
+		ObjectMeta: basePvObjectMeta,
+		Spec: corev1.PersistentVolumeSpec{
+			ClaimRef:                      basePPvcReference,
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
+			// StorageClassName:              translate.PhysicalName("someStorageClass", ""),
+		},
+	}
+	// Reclaim policy retain for physical PV, with bound status
+	baseRPRetainBoundPPv := baseRPRetainPPv.DeepCopy()
+	baseRPRetainBoundPPv.Status = corev1.PersistentVolumeStatus{
+		Phase: corev1.VolumeBound,
+	}
+
+	// Reclaim policy retain for physical PV, with released status
+	baseRPRetainReleasedPPv := baseRPRetainPPv.DeepCopy()
+	baseRPRetainReleasedPPv.Status = corev1.PersistentVolumeStatus{
+		Phase: corev1.VolumeReleased,
+	}
+
+	// Reclaim policy delete for physical PV
+	baseRPDeletePPv := &corev1.PersistentVolume{
+		ObjectMeta: basePvObjectMeta,
+		Spec: corev1.PersistentVolumeSpec{
+			ClaimRef:                      basePPvcReference,
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
+		},
+		Status: corev1.PersistentVolumeStatus{
+			Phase: corev1.VolumeReleased,
+		},
+	}
+	basePvcSC := basePvc.DeepCopy()
+	basePvcSC.Spec.StorageClassName = &baseRPRetainVPv.Spec.StorageClassName
 
 	generictesting.RunTests(t, []*generictesting.SyncTest{
+		{
+			Name:                 "Update Status Bound To Released Upwards:",
+			InitialVirtualState:  []runtime.Object{baseRPRetainBoundVPv},
+			InitialPhysicalState: []runtime.Object{baseRPRetainReleasedPPv},
+			ExpectedVirtualState: map[schema.GroupVersionKind][]runtime.Object{
+				corev1.SchemeGroupVersion.WithKind("PersistentVolume"): {baseRPRetainReleasedVPv},
+			},
+			ExpectedPhysicalState: map[schema.GroupVersionKind][]runtime.Object{
+				corev1.SchemeGroupVersion.WithKind("PersistentVolume"): {baseRPRetainReleasedPPv},
+			},
+			Sync: func(ctx *synccontext.RegisterContext) {
+				syncContext, syncer := newFakeSyncer(t, ctx)
+				_, err := syncer.Sync(syncContext, baseRPRetainReleasedPPv, baseRPRetainBoundVPv)
+				assert.NilError(t, err)
+			},
+		},
+		{
+			Name:                 "Create ReclaimPolicy Retain Upwards:",
+			InitialVirtualState:  []runtime.Object{basePvcSC},
+			InitialPhysicalState: []runtime.Object{basePvcSC, baseRPRetainPPv},
+			ExpectedVirtualState: map[schema.GroupVersionKind][]runtime.Object{
+				corev1.SchemeGroupVersion.WithKind("PersistentVolume"):      {baseRPRetainVPv},
+				corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"): {basePvcSC},
+			},
+			ExpectedPhysicalState: map[schema.GroupVersionKind][]runtime.Object{
+				corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"): {basePvcSC},
+				corev1.SchemeGroupVersion.WithKind("PersistentVolume"):      {baseRPRetainPPv},
+			},
+			Sync: func(ctx *synccontext.RegisterContext) {
+				syncContext, syncer := newFakeSyncer(t, ctx)
+				_, err := syncer.SyncUp(syncContext, baseRPRetainPPv)
+				assert.NilError(t, err)
+			},
+		},
+		{
+			Name:                  "Delete vPv,pPv When ReclaimPolicy Delete And Volume Released:",
+			InitialVirtualState:   []runtime.Object{basePvc, baseRPDeleteVPv},
+			InitialPhysicalState:  []runtime.Object{basePvc, baseRPDeletePPv},
+			ExpectedVirtualState:  map[schema.GroupVersionKind][]runtime.Object{},
+			ExpectedPhysicalState: map[schema.GroupVersionKind][]runtime.Object{},
+			Sync: func(ctx *synccontext.RegisterContext) {
+				syncContext, syncer := newFakeSyncer(t, ctx)
+				_, err := syncer.Sync(syncContext, baseRPDeletePPv, baseRPDeleteVPv)
+				assert.NilError(t, err)
+			},
+		},
 		{
 			Name:                 "Create Backward",
 			InitialVirtualState:  []runtime.Object{basePvc},
