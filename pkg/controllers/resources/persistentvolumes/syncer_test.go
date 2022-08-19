@@ -1,10 +1,11 @@
 package persistentvolumes
 
 import (
+	"testing"
+
 	synccontext "github.com/loft-sh/vcluster/pkg/controllers/syncer/context"
 	"gotest.tools/assert"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -108,9 +109,10 @@ func TestSync(t *testing.T) {
 		Spec: corev1.PersistentVolumeSpec{
 			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
 			ClaimRef: &corev1.ObjectReference{
-				Name:      "deletedPVC",
+				Name:      "retainPVC-x-test-x-suffix",
 				Namespace: "test",
 			},
+			StorageClassName: "vcluster-retainSC-x-test-x-suffix",
 		},
 		Status: corev1.PersistentVolumeStatus{
 			Phase: corev1.VolumeReleased,
@@ -121,9 +123,10 @@ func TestSync(t *testing.T) {
 		Spec: corev1.PersistentVolumeSpec{
 			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
 			ClaimRef: &corev1.ObjectReference{
-				Name:      "deletedPVC",
+				Name:      "retainPVC",
 				Namespace: "test",
 			},
+			StorageClassName: "retainSC",
 		},
 		Status: corev1.PersistentVolumeStatus{
 			Phase: corev1.VolumeBound,
@@ -134,9 +137,10 @@ func TestSync(t *testing.T) {
 		Spec: corev1.PersistentVolumeSpec{
 			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
 			ClaimRef: &corev1.ObjectReference{
-				Name:      "deletedPVC",
+				Name:      "retainPVC",
 				Namespace: "test",
 			},
+			StorageClassName: "retainSC",
 		},
 		Status: corev1.PersistentVolumeStatus{
 			Phase: corev1.VolumeReleased,
