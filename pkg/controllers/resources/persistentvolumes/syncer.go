@@ -250,6 +250,8 @@ func (s *persistentVolumeSyncer) shouldSync(ctx context.Context, pObj *corev1.Pe
 			return false, nil, err
 		} else if translate.IsManagedCluster(s.targetNamespace, pObj) {
 			return true, nil, nil
+		} else if kerrors.IsNotFound(err) {
+			return pObj.Spec.PersistentVolumeReclaimPolicy == corev1.PersistentVolumeReclaimRetain, nil, nil
 		}
 
 		return false, nil, nil
